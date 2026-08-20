@@ -56,7 +56,7 @@ def _call_ollama(texts: list[str], config: EmbedConfig) -> list[list[float]]:
         config.base_url, data=body, method="POST", headers={"Content-Type": "application/json"}
     )
     try:
-        with urllib.request.urlopen(request, timeout=120) as response:
+        with urllib.request.urlopen(request, timeout=600) as response:
             payload = json.loads(response.read())
     except urllib.error.HTTPError as e:
         detail = e.read().decode("utf-8", errors="replace")
