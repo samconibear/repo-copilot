@@ -6,5 +6,4 @@ from .models import SourceFile
 @runtime_checkable
 class Loader(Protocol):
     def load(self) -> Iterable[SourceFile]:
-        """Yield every file in the source as (path, bytes)."""
         pass
