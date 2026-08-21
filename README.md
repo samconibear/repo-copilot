@@ -1,7 +1,7 @@
 # Repo-Copilot
-This repo exposes a codebase as an MCP server: point it at a repo (a GitHub URL or a local path) and it ingests, chunks, embeds, and indexes the code.
-It then serves three tools — `search_code`, `read_file`, `list_files` - over
-MCP.
+This repo exposes a codebase as an MCP server: point it at a repo (a GitHub URL or a local path) and it serves three tools — `search_code`, `read_file`,
+`list_files` - over MCP. The server itself never ingests - build the index
+first with `scripts.ingest` (see below), then point the server at the same repo.
 
 ## Prerequisites
 
@@ -25,7 +25,26 @@ python3.14 -m venv .venv
 pip install -r requirements.txt
 ```
 
+## Ingest a repo
+
+The server only reads an existing index - it never ingests itself. Build (or
+rebuild) one first with the standalone ingestion script:
+
+```bash
+python -m scripts.ingest <github-url-or-local-path>
+# e.g.
+python -m scripts.ingest https://github.com/owner/repo
+python -m scripts.ingest ./path/to/local/repo
+```
+
+Every run wipes and re-ingests that repo's index from scratch - there's no
+incremental/cached ingestion yet, so expect the same wait every time. Re-run
+this whenever the repo changes; the server picks up the rebuilt index on its
+next tool call, no restart needed.
+
 ## Run it standalone
+
+Once a repo has been ingested, point the server at the same repo:
 
 ```bash
 python -m src.mcp.server <github-url-or-local-path>
@@ -33,8 +52,6 @@ python -m src.mcp.server <github-url-or-local-path>
 python -m src.mcp.server https://github.com/owner/repo
 python -m src.mcp.server ./path/to/local/repo
 ```
-
-Every run wipes and re-ingests that repo's index from scratch - there's no incremental/cached ingestion yet, so expect the same wait on every restart.
 
 ## Connect an MCP client
 The server speaks MCP over **stdio**. For Claude Code, add it as a project
@@ -76,7 +93,7 @@ In practice that means no layer is dependant on the logic of another layer, they
 |3      | Chunk oversized symbols and non code files |
 |4      | Embedding - generate vectors from code symbols |
 |5      | Storage of vectors and metadata |
-|6      | Interface - how to interact with the application |
+|6      | Interface - how we interact with the application |
 
 
 # LAYER 1: DATA INGESTION
@@ -164,12 +181,33 @@ When it came to deciding a way for a user to interface with the vector store, I 
 I decided to use mcp server was the best option, given then time constraints of this task, and the familiarity interface (claude code / desktop or likewise)
 In the future I will build a simple fastAPI server around  `tools.py` and build a frontend web interface to interact with it
 
+# FUTURE IMPROVEMENTS:
+- add a self-contained answering layer (direct LLM call over these tools) so the repo can answer a question on its own, not just via whatever MCP client connects
+- build a simple web frontend (FastAPI + chat UI) around said answering layer
+- automated tests per layer: This will be cheap as good layer boundaries architecture
+- benchmark embedding models (`nomic-embed-text` vs `jina-embeddings-v2-base-code` etc.) and chunking configs (`window_size`/`window_overlap`/`split_threshold`) against a real retrieval-quality metric
+- add filters on retrieval
+- containerise (Dockerfile + compose, including Ollama)
+- instead of clean wipe and re-ingestion each time, implement diff based re-embedding for repo changes
 
+# SCALING TO CLOUD
+Payoff of the layer-independence goal from the top of this doc - layers 1-5
+only pass plain dataclasses, so each becomes its own deployable without a rewrite.
 
+**Ingestion** - event-driven (webhook/EventBridge on repo push) instead of one
+blocking script; embedding moves behind a queue (SQS) to absorb the TPM-quota
+problem, scaling independently of the cheap steps ahead of it.
 
-# Future Improvements:
-Build frontend interface and handle 
-instead of clean wipe and re-ingestion each time, implement diff based re-embedding for repo changes 
-add filters on retrieval
-allow multiple different repo to be embedded dynamically (currently repo choice is baked in)
-add metadata to allow link directly to the github file
+**Storage** - one SQLite file per repo is the first thing that stops scaling.
+Swap `sqlite-vec` for a managed vector store (pgvector/OpenSearch) for
+concurrent multi-repo access.
+
+**Models** - swap the local Ollama daemon for a hosted embedding model (e.g.
+Cohere) to scale embedding throughput; the reasoning/answering layer calls Claude's API / AWS Bedrock directly instead of local running models
+
+**Serving** - backend behind API Gateway + Lambda, frontend served via Cloudfront
+
+**Guardrails** - ingest-time filtering, grounded/cited answers only, retrieved repo content treated as untrusted data not instructions (prompt-injection risk), and rate/cost caps on the reasoning API.
+
+**Multi-tenancy** - `repo_source` is a baked-in CLI arg today; production needs
+it as a per-request parameter with real tenant isolation, not a file per repo.
