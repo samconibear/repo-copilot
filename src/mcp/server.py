@@ -1,15 +1,14 @@
 """
-MCP server 
+MCP server
 Run with: python -m src.mcp.server <github-url-or-local-path>
+
+Ingestion is not triggered here - run `python -m scripts.ingest
+<github-url-or-local-path>` first to build the index this server reads.
 """
 import sys
 
 from mcp.server import MCPServer
 
-from .. import ingest
-from ..embedding.models import EmbedError
-from ..loaders.models import LoadError
-from ..storage.models import StoreError
 from . import tools
 
 REPO_SOURCE: str | None = None
@@ -45,14 +44,7 @@ def main() -> None:
         raise SystemExit(1)
     REPO_SOURCE = sys.argv[1]
 
-    print(f"ingesting {REPO_SOURCE}...", file=sys.stderr)
-    try:
-        n = ingest.ingest_repo(REPO_SOURCE)
-    except (LoadError, EmbedError, StoreError) as e:
-        print(f"error: {e}", file=sys.stderr)
-        raise SystemExit(1) from None
-    print(f"ingested {n} chunks, serving", file=sys.stderr)
-
+    print("serving over stdio", file=sys.stderr)
     mcp.run()
 
 
