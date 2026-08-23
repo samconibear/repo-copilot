@@ -11,7 +11,7 @@ from ..embedding.models import Embedding
 from ..loaders.models import SourceFile
 from .models import SearchResult, StoreError
 
-DEFAULT_ROOT = Path("data/store")
+DEFAULT_ROOT = Path(__file__).resolve().parents[2] / "data" / "store"
 
 _VEC_DIM = 768 # need to expose in future if change embed model
 

@@ -70,7 +70,10 @@ For Claude Desktop, add to `claude_desktop_config.json`:
     "repo-copilot": {
       "command": "/absolute/path/to/codebase-copilot/.venv/bin/python",
       "args": ["-m", "src.mcp.server", "<github-url-or-local-path>"],
-      "cwd": "/absolute/path/to/codebase-copilot"
+      "cwd": "/absolute/path/to/codebase-copilot",
+      "env": {
+        "PYTHONPATH": "/absolute/path/to/codebase-copilot"
+      }
     }
   }
 }
@@ -81,9 +84,13 @@ For Claude Desktop, add to `claude_desktop_config.json`:
 # Design choices
 
 Before designing the system, I set out a few goals for how I wanted the system to be architected:
+
 1. Use a micro-services like architecture, for 2 reasons:
+  
   a. This makes it easier to modify the individual "layers" of the application later.
+  
   b. For a scalable, production grade, event-driven application, different components will need to be placed in different serverless compute, along side this, it would likely be optimal to run different layers in managed queues (such as the embedding layer, which will have a token per minute (TPM) quota)
+
 In practice that means no layer is dependant on the logic of another layer, they could be deployed on independent compute.
 
 | LAYER | PURPOSE |
@@ -137,7 +144,7 @@ I chose to use this same mechanism for non code files, such as README, yaml or D
 
 I decided to skip files with no value for semantic search, such as binary or extremely large files.
 
-# EMBEDDING
+# LAYER 4: EMBEDDING
 
 ## Embedding modal
 I considered to use a few differnt lightweight embedding models for this task
@@ -155,7 +162,7 @@ This keeps "how to represent a chunk to the model" a decision local to this laye
 Vector dimension (768) is pinned to this model and baked into the storage at this point.
 
 
-# STORAGE
+# LAYER 5: STORAGE
 
 I chose to go with SQLite + `sqlite-vec` over an embedded vector DB (Chroma/LanceDB) or numpy cosine in plain SQLite. Because its a real SQL-native KNN in a single file, closer to an actual production vector DB without the heavy dependency.
 
@@ -172,13 +179,13 @@ A future model/dimension change needs a new table or migration, its a trade-off 
 Blocker hit mid-build: `sqlite-vec` needs SQLite extension-loading support,
 which my machine's does not support. I found instead `apsw` which bundles its own SQLite with extension loading enabled - would like to remove this dep in future.
 
-# INTERFACE
+# LAYER 6: INTERFACE
 When it came to deciding a way for a user to interface with the vector store, I considered a few options:
 1. Lightweight web-app chatbot-like frontend
 2. Direct query though CLI
 3. Expose as MCP server
 
-I decided to use mcp server was the best option, given then time constraints of this task, and the familiarity interface (claude code / desktop or likewise)
+I decided to use mcp server was the best option, given then time constraints of this task, and the user familiarity of the interface (claude code / desktop or likewise)
 In the future I will build a simple fastAPI server around  `tools.py` and build a frontend web interface to interact with it
 
 # FUTURE IMPROVEMENTS:
@@ -186,13 +193,19 @@ In the future I will build a simple fastAPI server around  `tools.py` and build 
 - build a simple web frontend (FastAPI + chat UI) around said answering layer
 - automated tests per layer: This will be cheap as good layer boundaries architecture
 - benchmark embedding models (`nomic-embed-text` vs `jina-embeddings-v2-base-code` etc.) and chunking configs (`window_size`/`window_overlap`/`split_threshold`) against a real retrieval-quality metric
-- add filters on retrieval
+- pre-filter candidates (e.g. by language, file path/extension, symbol type) before running semantic search. This narrows the vector search space and should improve retrieval accuracy.
 - containerise (Dockerfile + compose, including Ollama)
 - instead of clean wipe and re-ingestion each time, implement diff based re-embedding for repo changes
 
 # SCALING TO CLOUD
-Payoff of the layer-independence goal from the top of this doc - layers 1-5
-only pass plain dataclasses, so each becomes its own deployable without a rewrite.
+This is the payoff of the micro-services design choice set out at the start of the project.
+Layers were deliberately built to have no cross dependancy (aside from some dataclasses which can be generalised later with ease):
+
+Every layer is already isolated enough to lift out unmodified: put it in its own Dockerfile, and it runs as an independent container or function. 
+
+Each layer can be containerised, scaled, redeployed, and versioned on its own schedule.
+That's exactly what's needed once a layer like embedding (bound by an embedding-model TPM quota) has to sit behind a managed queue while the cheap
+layers ahead of it (loading, parsing, chunking) run unthrottled on independent compute.
 
 **Ingestion** - event-driven (webhook/EventBridge on repo push) instead of one
 blocking script; embedding moves behind a queue (SQS) to absorb the TPM-quota
