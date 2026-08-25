@@ -134,7 +134,7 @@ class TestCitations:
                 "qualified_name": None,
                 "symbol_kind": None,
                 "parent": None,
-                "score": "Bypassed RAG, read full file",
+                "score": "Bypassed RAG - read full file",
             }
         ]
 
@@ -152,6 +152,72 @@ class TestCitations:
 
         result = ask("repo", "q", _CONFIG)
         assert result.citations == []
+
+    def test_duplicate_chunk_within_one_search_code_call_is_not_repeated(self, monkeypatch):
+        calls = []
+        dup_hit = {"file_path": "a.py", "start_line": 1, "end_line": 5, "content": "x", "score": 0.9}
+        search_hits = [dup_hit, dict(dup_hit)]
+
+        def fake_call(messages, system, tools, config):
+            calls.append(None)
+            if len(calls) == 1:
+                return _tool_use_response("search_code", {"query": "q"})
+            return _text_response("done")
+
+        monkeypatch.setattr("src.api.agent.loop.client.call", fake_call)
+        monkeypatch.setattr("src.api.agent.loop.dispatch", lambda repo, name, inp: search_hits)
+
+        result = ask("repo", "q", _CONFIG)
+        assert result.citations == [dup_hit]
+
+    def test_same_chunk_across_two_search_code_calls_is_not_repeated(self, monkeypatch):
+        calls = []
+        hit = {"file_path": "a.py", "start_line": 1, "end_line": 5, "content": "x", "score": 0.9}
+
+        def fake_call(messages, system, tools, config):
+            calls.append(None)
+            if len(calls) <= 2:
+                return _tool_use_response("search_code", {"query": f"q{len(calls)}"})
+            return _text_response("done")
+
+        monkeypatch.setattr("src.api.agent.loop.client.call", fake_call)
+        monkeypatch.setattr("src.api.agent.loop.dispatch", lambda repo, name, inp: [dict(hit)])
+
+        result = ask("repo", "q", _CONFIG)
+        assert result.citations == [hit]
+
+    def test_read_file_citation_matching_an_existing_search_code_range_is_not_repeated(
+        self, monkeypatch
+    ):
+        calls = []
+        search_hit = {
+            "file_path": "a.py",
+            "start_line": 1,
+            "end_line": 3,
+            "content": "line one\nline two\nline three",
+            "score": 0.9,
+        }
+
+        def fake_call(messages, system, tools, config):
+            calls.append(None)
+            if len(calls) == 1:
+                return _tool_use_response("search_code", {"query": "q"})
+            if len(calls) == 2:
+                return _tool_use_response("read_file", {"path": "a.py"})
+            return _text_response("done")
+
+        def fake_dispatch(repo, name, inp):
+            if name == "search_code":
+                return [dict(search_hit)]
+            return "line one\nline two\nline three"
+
+        monkeypatch.setattr("src.api.agent.loop.client.call", fake_call)
+        monkeypatch.setattr("src.api.agent.loop.dispatch", fake_dispatch)
+
+        result = ask("repo", "q", _CONFIG)
+        # Same file_path/start_line/end_line as the search_code hit - the
+        # read_file citation is dropped, first occurrence wins.
+        assert result.citations == [search_hit]
 
     def test_read_file_error_is_not_captured_as_a_citation(self, monkeypatch):
         calls = []

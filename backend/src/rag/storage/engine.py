@@ -12,10 +12,13 @@ from ..embedding.models import Embedding
 from ..loaders.models import SourceFile
 from .models import RepoInfo, SearchResult, StoreError
 
-# repo root: src/rag/storage/engine.py -> parents[3]. (Was parents[2] back
-# when this module lived at src/storage/engine.py, one level shallower -
-# fixed as part of plans/09-repo-list.md; the stale `data/store/` content
-# left behind by that bug is *not* touched here, see that doc.)
+# backend root: backend/src/rag/storage/engine.py -> parents[3]. (Was
+# parents[2] back when this module lived at src/storage/engine.py, one level
+# shallower - fixed as part of plans/09-repo-list.md; the stale `data/store/`
+# content left behind by that bug is *not* touched here, see that doc. Stayed
+# at parents[3] when `src/` moved under `backend/` - the added directory
+# level now resolves to <backend-root>/data/store instead of <repo-root>,
+# which is what we want: backend owns its own data, same as frontend/dist.)
 DEFAULT_ROOT = Path(__file__).resolve().parents[3] / "data" / "store"
 
 _VEC_DIM = 768 # need to expose in future if change embed model

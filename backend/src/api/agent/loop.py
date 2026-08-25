@@ -15,6 +15,7 @@ _DEFAULT_CONFIG = AgentConfig()
 def ask(repo_source: str, question: str, config: AgentConfig = _DEFAULT_CONFIG) -> AgentResult:
     messages: list[dict] = [{"role": "user", "content": question}]
     citations: list[dict] = []
+    seen: set[tuple[object, object, object]] = set()
 
     for _ in range(config.max_iterations):
         response = client.call(messages, SYSTEM_PROMPT, TOOL_SCHEMAS, config)
@@ -30,9 +31,10 @@ def ask(repo_source: str, question: str, config: AgentConfig = _DEFAULT_CONFIG) 
                 continue
             result = _run_tool(repo_source, block["name"], block["input"])
             if block["name"] == "search_code" and isinstance(result, list):
-                citations.extend(result)
+                for hit in result:
+                    _add_citation(citations, seen, hit)
             elif block["name"] == "read_file" and isinstance(result, str):
-                citations.append(_read_file_citation(block["input"].get("path", ""), result))
+                _add_citation(citations, seen, _read_file_citation(block["input"].get("path", ""), result))
             tool_results.append(
                 {"type": "tool_result", "tool_use_id": block["id"], "content": json.dumps(result)}
             )
@@ -65,13 +67,28 @@ def _read_file_citation(path: str, content: str) -> dict:
         "qualified_name": None,
         "symbol_kind": None,
         "parent": None,
-        # Not a similarity score - read_file returns the file verbatim,
-        # bypassing retrieval entirely, so there's no ranking to report.
-        # A string here (Citation.score is float | str) instead of a
-        # numeric sentinel, so the frontend can tell the two apart and
-        # show this in place of a score in the badge.
-        "score": "Bypassed RAG, read full file",
+        "score": "Bypassed RAG - read full file",
     }
+
+
+def _add_citation(
+    citations: list[dict], seen: set[tuple[object, object, object]], citation: dict
+) -> None:
+    """Append a citation unless the same chunk (file_path + line range) is
+    already in the list.
+
+    The same chunk can legitimately come back twice in one turn - two
+    search_code queries overlapping in what they surface, or read_file
+    called on a path search_code already returned a sub-range of - and
+    the frontend renders `citations` as a flat list with no de-dup of its
+    own (PreviewPane.tsx), so a repeat citation showed up as a literal
+    duplicate card in the source-chunks panel. First occurrence wins.
+    """
+    key = (citation.get("file_path"), citation.get("start_line"), citation.get("end_line"))
+    if key in seen:
+        return
+    seen.add(key)
+    citations.append(citation)
 
 
 def _run_tool(repo_source: str, name: str, tool_input: dict) -> object:
