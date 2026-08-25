@@ -1,5 +1,6 @@
 import hashlib
 import re
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Iterable
 
@@ -9,9 +10,13 @@ import sqlite_vec
 from ..chunking.models import Chunk
 from ..embedding.models import Embedding
 from ..loaders.models import SourceFile
-from .models import SearchResult, StoreError
+from .models import RepoInfo, SearchResult, StoreError
 
-DEFAULT_ROOT = Path(__file__).resolve().parents[2] / "data" / "store"
+# repo root: src/rag/storage/engine.py -> parents[3]. (Was parents[2] back
+# when this module lived at src/storage/engine.py, one level shallower -
+# fixed as part of plans/09-repo-list.md; the stale `data/store/` content
+# left behind by that bug is *not* touched here, see that doc.)
+DEFAULT_ROOT = Path(__file__).resolve().parents[3] / "data" / "store"
 
 _VEC_DIM = 768 # need to expose in future if change embed model
 
@@ -37,6 +42,11 @@ CREATE TABLE IF NOT EXISTS files (
     file_path TEXT PRIMARY KEY,
     content TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS meta (
+    repo_source TEXT NOT NULL,
+    chunks_ingested INTEGER NOT NULL,
+    ingested_at TEXT NOT NULL
+);
 """
 
 
@@ -53,6 +63,11 @@ def ingest(repo_source: str, chunks: Iterable[Chunk], embeddings: Iterable[Embed
         with conn:
             conn.execute("DELETE FROM chunks")
             conn.execute("DELETE FROM vec_chunks")
+            conn.execute("DELETE FROM meta")
+            conn.execute(
+                "INSERT INTO meta (repo_source, chunks_ingested, ingested_at) VALUES (?, ?, ?)",
+                (repo_source, len(chunks), datetime.now(timezone.utc).isoformat()),
+            )
             for chunk, emb in zip(chunks, embeddings):
                 if chunk.key != emb.key:
                     raise StoreError(
@@ -194,9 +209,37 @@ def list_files(repo_source: str) -> list[str]:
     return [r[0] for r in rows]
 
 
+def list_repos(root: Path = DEFAULT_ROOT) -> list[RepoInfo]:
+    """Every indexed repo's `meta` row, one per `*.db` file under `root`.
+    A `.db` with no readable `meta` row (e.g. ingested before this table
+    existed) is skipped, not raised on - see plans/09-repo-list.md."""
+    if not root.exists():
+        return []
+
+    repos = []
+    for db_path in sorted(root.glob("*.db")):
+        try:
+            conn = _connect_at(db_path)
+            try:
+                row = conn.execute(
+                    "SELECT repo_source, chunks_ingested, ingested_at FROM meta LIMIT 1"
+                ).fetchone()
+            finally:
+                conn.close()
+        except apsw.Error:
+            continue
+        if row is not None:
+            repos.append(RepoInfo(repo_source=row[0], chunks_ingested=row[1], ingested_at=row[2]))
+    return repos
+
+
 def _connect(repo_source: str) -> apsw.Connection:
     path = _db_path(repo_source)
     path.parent.mkdir(parents=True, exist_ok=True)
+    return _connect_at(path)
+
+
+def _connect_at(path: Path) -> apsw.Connection:
     conn = apsw.Connection(str(path))
     conn.enableloadextension(True)
     conn.loadextension(sqlite_vec.loadable_path())
