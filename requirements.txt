@@ -4,3 +4,5 @@ tree-sitter-language-pack
 mcp
 sqlite-vec
 apsw
+fastapi
+uvicorn
