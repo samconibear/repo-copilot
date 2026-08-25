@@ -1,0 +1,45 @@
+const EXTENSION_TO_LANGUAGE: Record<string, string> = {
+  py: "python",
+  js: "javascript",
+  jsx: "javascript",
+  mjs: "javascript",
+  cjs: "javascript",
+  ts: "typescript",
+  tsx: "typescript",
+  go: "go",
+  rs: "rust",
+  c: "c",
+  h: "c",
+  cpp: "cpp",
+  cc: "cpp",
+  cxx: "cpp",
+  hpp: "cpp",
+  java: "java",
+  kt: "kotlin",
+  cs: "csharp",
+  rb: "ruby",
+  php: "php",
+  swift: "swift",
+  sh: "bash",
+  bash: "bash",
+  json: "json",
+  yaml: "yaml",
+  yml: "yaml",
+  md: "markdown",
+  css: "css",
+  scss: "scss",
+  less: "less",
+  html: "xml",
+  xml: "xml",
+  sql: "sql",
+  graphql: "graphql",
+  lua: "lua",
+  pl: "perl",
+  r: "r",
+};
+
+export function languageForPath(path: string): string | undefined {
+  const ext = path.split(".").pop();
+  if (!ext) return undefined;
+  return EXTENSION_TO_LANGUAGE[ext.toLowerCase()];
+}
