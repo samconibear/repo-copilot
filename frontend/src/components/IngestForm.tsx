@@ -35,7 +35,6 @@ export function IngestForm({ onIngest }: IngestFormProps) {
       >
         Ingest
       </button>
-      <p className="text-xs text-zinc-500">Progress shows in the list below.</p>
     </form>
   );
 }
