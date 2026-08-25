@@ -2,24 +2,33 @@
 tool the MCP server exposes (src/mcp/tools.py), printing ranked, cited
 results.
 
-Run with: python -m scripts.demo [repo-source] [question]
+Run with: python -m scripts.demo [query] [--repo REPO]
 Defaults to this project's own src/ and a question about the storage layer.
 """
+import argparse
 import sys
 
-from src import ingest
-from src.embedding.models import EmbedError
-from src.loaders.models import LoadError
-from src.mcp import tools
-from src.storage.models import StoreError
+from src.api.mcp import tools
+from src.rag import ingest
+from src.rag.embedding.models import EmbedError
+from src.rag.loaders.models import LoadError
+from src.rag.storage.models import StoreError
 
 DEFAULT_REPO = "./src"
 DEFAULT_QUESTION = "how does the storage layer save chunks and embeddings to sqlite?"
 
 
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("query", nargs="?", default=DEFAULT_QUESTION, help="search query")
+    parser.add_argument("--repo", default=DEFAULT_REPO, help="repo source to ingest")
+    return parser.parse_args()
+
+
 def main() -> None:
-    repo_source = sys.argv[1] if len(sys.argv) > 1 else DEFAULT_REPO
-    question = sys.argv[2] if len(sys.argv) > 2 else DEFAULT_QUESTION
+    args = parse_args()
+    repo_source = args.repo
+    question = args.query
 
     print(f"ingesting {repo_source} ...")
     try:

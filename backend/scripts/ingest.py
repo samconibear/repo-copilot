@@ -6,10 +6,10 @@ Run with: python -m scripts.ingest <github-url-or-local-path>
 """
 import sys
 
-from src import ingest
-from src.embedding.models import EmbedError
-from src.loaders.models import LoadError
-from src.storage.models import StoreError
+from src.rag import ingest
+from src.rag.embedding.models import EmbedError
+from src.rag.loaders.models import LoadError
+from src.rag.storage.models import StoreError
 
 
 def main() -> None:

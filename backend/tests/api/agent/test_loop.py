@@ -109,7 +109,7 @@ class TestCitations:
         result = ask("repo", "q", _CONFIG)
         assert result.citations == search_hits
 
-    def test_read_file_and_list_files_results_are_not_captured_as_citations(self, monkeypatch):
+    def test_read_file_results_are_captured_as_a_whole_file_citation(self, monkeypatch):
         calls = []
 
         def fake_call(messages, system, tools, config):
@@ -119,7 +119,55 @@ class TestCitations:
             return _text_response("done")
 
         monkeypatch.setattr("src.api.agent.loop.client.call", fake_call)
-        monkeypatch.setattr("src.api.agent.loop.dispatch", lambda repo, name, inp: "file contents")
+        monkeypatch.setattr(
+            "src.api.agent.loop.dispatch", lambda repo, name, inp: "line one\nline two\nline three"
+        )
+
+        result = ask("repo", "q", _CONFIG)
+        assert result.citations == [
+            {
+                "file_path": "a.py",
+                "content": "line one\nline two\nline three",
+                "chunk_type": "file",
+                "start_line": 1,
+                "end_line": 3,
+                "qualified_name": None,
+                "symbol_kind": None,
+                "parent": None,
+                "score": "Bypassed RAG, read full file",
+            }
+        ]
+
+    def test_list_files_results_are_not_captured_as_citations(self, monkeypatch):
+        calls = []
+
+        def fake_call(messages, system, tools, config):
+            calls.append(None)
+            if len(calls) == 1:
+                return _tool_use_response("list_files", {})
+            return _text_response("done")
+
+        monkeypatch.setattr("src.api.agent.loop.client.call", fake_call)
+        monkeypatch.setattr("src.api.agent.loop.dispatch", lambda repo, name, inp: ["a.py", "b.py"])
+
+        result = ask("repo", "q", _CONFIG)
+        assert result.citations == []
+
+    def test_read_file_error_is_not_captured_as_a_citation(self, monkeypatch):
+        calls = []
+
+        def fake_call(messages, system, tools, config):
+            calls.append(None)
+            if len(calls) == 1:
+                return _tool_use_response("read_file", {"path": "missing.py"})
+            return _text_response("done")
+
+        monkeypatch.setattr("src.api.agent.loop.client.call", fake_call)
+
+        def fake_dispatch(repo, name, inp):
+            raise ValueError("no such file")
+
+        monkeypatch.setattr("src.api.agent.loop.dispatch", fake_dispatch)
 
         result = ask("repo", "q", _CONFIG)
         assert result.citations == []

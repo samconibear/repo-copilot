@@ -40,16 +40,21 @@ class AskRequest(BaseModel):
 
 
 class Citation(BaseModel):
-    """One `search_code` result the agent used while answering - see
-    plans/08-frontend.md decision #7/#8. Mirrors src/api/mcp/tools.py's
-    `_result_to_dict` shape, minus the fields the frontend doesn't use
-    (chunk_type, symbol_kind, parent)."""
+    """One `search_code` or `read_file` result the agent used while
+    answering - see plans/08-frontend.md decision #7/#8. Mirrors
+    src/api/mcp/tools.py's `_result_to_dict` shape, minus the fields the
+    frontend doesn't use (chunk_type, symbol_kind, parent).
+
+    `score` is a float for a `search_code` hit (similarity, 0-1) but a
+    string for a `read_file` citation (src/api/agent/loop.py,
+    `_read_file_citation`) - read_file bypasses retrieval entirely, so
+    there's no ranking to report, only a label saying so."""
 
     file_path: str
     start_line: int
     end_line: int
     qualified_name: str | None
-    score: float
+    score: float | str
     content: str
 
 
