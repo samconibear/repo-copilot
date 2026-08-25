@@ -47,10 +47,10 @@ next tool call, no restart needed.
 Once a repo has been ingested, point the server at the same repo:
 
 ```bash
-python -m src.mcp.server <github-url-or-local-path>
+python -m src.api.mcp.server <github-url-or-local-path>
 # e.g.
-python -m src.mcp.server https://github.com/owner/repo
-python -m src.mcp.server ./path/to/local/repo
+python -m src.api.mcp.server https://github.com/owner/repo
+python -m src.api.mcp.server ./path/to/local/repo
 ```
 
 ## Connect an MCP client
@@ -58,7 +58,7 @@ The server speaks MCP over **stdio**. For Claude Code, add it as a project
 or user MCP server:
 
 ```bash
-claude mcp add repo-copilot -- python -m src.mcp.server <github-url-or-local-path>
+claude mcp add repo-copilot -- python -m src.api.mcp.server <github-url-or-local-path>
 ```
 (run from this repo's root, with `.venv` activated, or use the venv's
 absolute Python path, e.g. `/path/to/codebase-copilot/.venv/bin/python`).
@@ -69,7 +69,7 @@ For Claude Desktop, add to `claude_desktop_config.json`:
   "mcpServers": {
     "repo-copilot": {
       "command": "/absolute/path/to/codebase-copilot/.venv/bin/python",
-      "args": ["-m", "src.mcp.server", "<github-url-or-local-path>"],
+      "args": ["-m", "src.api.mcp.server", "<github-url-or-local-path>"],
       "cwd": "/absolute/path/to/codebase-copilot",
       "env": {
         "PYTHONPATH": "/absolute/path/to/codebase-copilot"
@@ -78,6 +78,26 @@ For Claude Desktop, add to `claude_desktop_config.json`:
   }
 }
 ```
+
+## HTTP API
+
+A FastAPI alternative to the MCP server, for driving ingestion and the
+agent loop over plain HTTP instead of stdio/MCP:
+
+```bash
+uvicorn src.api.server.main:app --reload
+```
+
+- `POST /ingest` — `{"repo_source": "<github-url-or-local-path>"}` → indexes
+  the repo (wipe-and-rebuild, same as `scripts.ingest`), returns
+  `{"repo_source": ..., "chunks_ingested": <int>}`.
+- `POST /ask` — `{"repo_source": ..., "question": "..."}` → runs the same
+  agent loop as the MCP server (`search_code`/`read_file`/`list_files`
+  tools) and returns `{"repo_source": ..., "answer": "..."}`. Requires
+  `ANTHROPIC_API_KEY` in the environment.
+
+Interactive docs (Swagger UI) are served at `/docs` once the server is
+running.
 
 ---
 
