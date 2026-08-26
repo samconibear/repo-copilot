@@ -52,6 +52,7 @@ cd frontend
 npm install
 npm run dev
 ```
+The app is now served on `http://localhost:5173`
 
 ## Running tests
 
