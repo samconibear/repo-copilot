@@ -121,15 +121,6 @@ For Claude Desktop, add to `claude_desktop_config.json`:
 }
 ```
 
-## HTTP API
-
-- `POST /ingest` — `{"repo_source": "<github-url-or-local-path>"}` ->
-  indexes the repo (wipe-and-rebuild, same as `scripts.ingest`).
-- `POST /ask` — `{"repo_source": ..., "question": "..."}` -> uns the same
-  agent loop as the MCP server (`search_code`/`read_file`/`list_files`
-  tools) and returns `{"repo_source": ..., "answer": "..."}`. Requires
-  `ANTHROPIC_API_KEY` in the environment.
-
 ---
 
 # Design choices
