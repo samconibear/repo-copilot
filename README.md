@@ -1,11 +1,12 @@
 # Repo-Copilot
 Ask questions about a codebase in plain English and get answers grounded in the code, cited to the line.
+
 Useful for onboarding, PR review, or just exploring a codebase - point it at a GitHub repo or local path.
+
 RAG with AST aware chunking, an agent loop driving Claude through tool calls against the indexed repo, citing the exact code that grounds each answer.
 
-Built on tree-sitter, Ollama (`nomic-embed-text` embeddings), SQLite + `sqlite-vec`, Claude, FastAPI, and React/Tailwind.
-
 ![Repo Copilot answering a question with cited source chunks](examples/Q4.png)
+Built on tree-sitter, Ollama (`nomic-embed-text` embeddings), SQLite + `sqlite-vec`, Claude, FastAPI, and React/Tailwind.
 
 ## Prerequisites
 
