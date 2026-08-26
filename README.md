@@ -6,6 +6,7 @@ Useful for onboarding, PR review, or just exploring a codebase - point it at a G
 RAG with AST aware chunking, an agent loop driving Claude through tool calls against the indexed repo, citing the exact code that grounds each answer.
 
 ![Repo Copilot answering a question with cited source chunks](examples/Q1-video.gif)
+
 Built on tree-sitter, Ollama (`nomic-embed-text` embeddings), SQLite + `sqlite-vec`, Claude, FastAPI, and React/Tailwind.
 
 ## Prerequisites
