@@ -9,6 +9,8 @@ RAG with AST aware chunking, an agent loop driving Claude through tool calls aga
 
 Built on tree-sitter, Ollama (`nomic-embed-text` embeddings), SQLite + `sqlite-vec`, Claude, FastAPI, and React/Tailwind.
 
+See [architecture.md](architecture.md) for the full diagram.
+
 ## Prerequisites
 
 - **Python 3.14.6** ([.python-version](backend/.python-version)). If you use `pyenv`:
@@ -109,6 +111,29 @@ For Claude Desktop, add to `claude_desktop_config.json`:
   }
 }
 ```
+
+## Screenshots
+
+#### end-to-end: ask, retrieve, cite, jump to source
+![Answering a question with cited source chunks](examples/Q1-video.gif)
+
+#### Streamed ingestion progress
+![Indexing a repo](examples/indexing-a-repo.gif)
+
+#### Code highlighting in a cited chunk
+![Code highlighting in a cited chunk](examples/Q2-code-highlight.png)
+
+#### Full file ingestion for certain queries
+![Full file ingestion for certain queries](examples/Q3-no-rag.png)
+
+#### Another grounded answer
+![Another grounded answer](examples/Q4.png)
+
+#### Retrieval-only via the CLI script - for debugging retrieval in isolation
+![Retrieval-only via the CLI script](examples/retrieval-only-cli-script.png)
+
+#### Connect as a mcp server in claude desktop
+![Connected as an MCP server to Claude Desktop](examples/mcp-claude-desktop.png)
 
 ---
 
@@ -229,14 +254,16 @@ Nothing upstream stores whole-file text — storage only keeps Chunk/Embeddings.
 The solution I settled on was to add a `files` table to the database containing the full file content, populated at ingestion time. `list_files` then also falls out of that for free.
 
 # LAYER 8: AGENT LOOP
+## Orchestration
+I decided to implement a manual `tool_use` -> execute -> `tool_result` -> repeat loop, capped at 5 tool-call rounds per question.
+
+I made this choice instead of going for a framework like LangChain, LlamaIndex, Strands or the Claude Agent SDK. For 3 tools and the time constraints of the project, adding a framework is higher cost than a ~40 lines of code loop. That trade-off will flip once there's more than one agent, or a need for built-in retries/observability.
+
+## Model choice
 I decided to go with Claude / Anthropic for the answering model, mostly because:
 1. It fully meets the needs of this project
 2. I cannot run a decent local model on this machine
 3. I already had an account / api key
-
-I implemented a manual `tool_use` -> execute -> `tool_result` -> repeat loop, capped at 5 tool-call rounds per question.
-
-I knew that for this app it was key that the user could see what actually grounded an answer, not just the answer text. So I designed `ask()` to accumulate every `search_code` and `read_code` result it sees along the way into an `AgentResult.citations` list.
 
 ## System prompt logic
 Each clause answers a specific failure mode:
@@ -247,6 +274,23 @@ Each clause answers a specific failure mode:
 - **Retry once with different terms, then say so** - covers `nomic-embed-text`'s real recall misses without licensing it to guess past a second miss.
 - **`read_file`/`list_files`/`search_code` guidance** - the three tools have very different costs, and left alone the model reaches for whichever sounds closest instead of the cheapest fit.
 - **Be concise** - this feeds a chat UI, not a docs generator.
+
+## Answer Grounding / Citations
+I knew that for this app it was key that the user could see what actually grounded an answer, not just the answer text. So I designed `ask()` to accumulate every `search_code` and `read_code` result it sees along the way into an `AgentResult.citations` list.
+
+## Guardrails
+- System prompt treats tool results as untrusted data, not instructions - guard against prompt injection.
+- max_iterations capped at 5 and a 60s Anthropic timeout -  guard against runaway loops.
+- Pydantic validates all API inputs.
+- To add: rate limiting, a cost cap on Anthropic calls.
+
+## Quality
+- Retrieval score is surfaced end-to-end to the frontend rather than hidden, so grounding confidence is visible.
+- To add: an automated retrieval eval set to catch regressions.
+
+## Observability
+- Ingestion streams real phase-by-phase progress instead of a black box.
+- To add: structured per-request logging and tracing beyond uvicorn's defaults - `loop.py`'s tool-dispatch point is where that would hook in.
 
 # LAYER 9: HTTP API
 A thin FastAPI wrapper (`backend/src/api/server/main.py`) over the two things a caller does with a repo: ingest it, then ask it questions, plus a third: list what's already been ingested.
@@ -278,11 +322,38 @@ One final feature I wanted to add was improved traceability between the agent’
 
 ---
 
+# ENGINEERING STANDARDS
+- Typed end-to-end (Pydantic models on the backend, strict TypeScript on the frontend).
+- Unit tests for frontend and every backend layer.
+- Shared fixtures via `conftest.py` rather than duplicated setup per test file.
+- Frontend logic that might live in components was pulled out into pure functions so that unit-tests dont need a browser to run.
+- Immutable config throughout: `@dataclass(frozen=True)`
+- Interface-based extensibility: `Loader` & `LanguageConfig`
+- Consistent per-layer convention: each layer has a `models.py`, `engine.py`, its own error and a config object
+- eslint/prettier enforced on the frontend.
+
+### To add later
+- linter/formatter/type-checker on the backend (probably will use ruff & mypy)
+- Interface-based extensibility for embedding model, reasoning model & Databse
+-  CI running both test suites, linter and type-checker on push. 
+
+# HOW I USED AI TOOLS
+I used Claude Code as a pair programmer throughout, with the following principles:
+
+- **Detailed planing per layer** - for each layer I wrote a short design doc (open questions, options to be considered, decision). Then I would go through a Q&A / grill-me session with the agent to refine the design doc, resolve all technical implementation details and cover every edge case before begining the implementation.
+
+- **Plan docs kept live during implementation** - once a layer was built, I had it update that layer's plan doc with whatever changed or was discovered along the way. Such as implementation details that shifted from the original design, bugs hit and how they were fixed, dependency issues (e.g. the `sqlite-vec` extension-loading blocker). This way the doc stays the true record of the layer.
+
+- **Use it to cross knowledge gaps, with a paper trail** - I wasn't familiar with tree-sitter grammars going in. I had it implement them, then asked it to write implementation notes explaining what it did and why, so it isn't a black box I have to trust blindly later.
+
+- **Own decison making and trade-off reasoning myself** - the design choices and trade-offs in this README are completely mine. AI helped implement against a decision, it didn't make the decision.
+
 # FUTURE IMPROVEMENTS:
 - benchmark embedding models (`nomic-embed-text` vs `jina-embeddings-v2-base-code` etc.) and chunking configs (`window_size`/`window_overlap`/`split_threshold`) against a real retrieval-quality metric
 - pre-filter candidates (e.g. by language, file path/extension, symbol type) before running semantic search. This narrows the vector search space and should improve retrieval accuracy.
 - Add a separate graph store alongside the vector store, capturing structural relationships between symbols. Vector search can't answer structural questions like "what calls this function". A graph store would allow us to build tools like `find_callers`.
 - containerise (Dockerfile + compose, including Ollama)
+- CI (GitHub Actions running backend pytest + mypy & frontend vitest on push)
 - instead of clean wipe and re-ingestion each time, implement diff based re-embedding for repo changes
 - Ingest progress: implement current-file-name visibility in loading/chunking events
 - a delete/remove-repo action in the frontend's repo list — list-and-select only today
