@@ -5,6 +5,7 @@ Useful for onboarding, PR review, or just exploring a codebase - point it at a G
 
 RAG with AST aware chunking, an agent loop driving Claude through tool calls against the indexed repo, citing the exact code that grounds each answer.
 
+#### Ask, Retrieve, Cite & Jump to Source
 ![Repo Copilot answering a question with cited source chunks](examples/Q1-video.gif)
 
 Built on tree-sitter, Ollama (`nomic-embed-text` embeddings), SQLite + `sqlite-vec`, Claude, FastAPI, and React/Tailwind.
@@ -114,16 +115,13 @@ For Claude Desktop, add to `claude_desktop_config.json`:
 
 ## Screenshots
 
-#### end-to-end: ask, retrieve, cite, jump to source
-![Answering a question with cited source chunks](examples/Q1-video.gif)
-
 #### Streamed ingestion progress
 ![Indexing a repo](examples/indexing-a-repo.gif)
 
 #### Code highlighting in a cited chunk
 ![Code highlighting in a cited chunk](examples/Q2-code-highlight.png)
 
-#### Full file ingestion for certain queries
+#### Full file read / referencing for certain queries
 ![Full file ingestion for certain queries](examples/Q3-no-rag.png)
 
 #### Another grounded answer
@@ -185,7 +183,7 @@ I wanted to be able to chunk source code intelligently, not just using classic t
 ## Abstract Syntax Tree (AST)
 I decided that the best solution for this is to introduce the dependency of tree-sitter. This can dynamically handle the parsing of source code files from different languages. I built the language definition system that can be easily extendable in future (add a `.scm` file, and make a `LanguageConfig` in the `registry.py`). For now I only built definitions for a few common languages.
 
-Tree-splitter was a package that I was not familiar with. I asked AI to implement a few common programming languages. The code seemed to balloon in complexity beyond my understanding. If I had more time I would try to understand in further detail. But instead for now I asked the AI to make detailed implementation notes that I could read later or could later be picked up by another Agent in the future.
+Tree-sitter was a package that I was not familiar with. I asked AI to implement a few common programming languages. The code seemed to balloon in complexity beyond my understanding. If I had more time I would try to understand in further detail. But instead for now I asked the AI to make detailed implementation notes that I could read later or could later be picked up by another Agent in the future.
 
 I decided to store the parsed symbols as the raw unmodified text (instead of decorating with a heading with metadata). This allows us maximum flexibility on how to implement it later, as well as allowing the next layer (which knows what embedding model is being used), to decide the best strategy to decorate the chunks.
 
@@ -193,7 +191,7 @@ I decided to store the parsed symbols as the raw unmodified text (instead of dec
 Different embedding models have different token limits and different retrieval-quality sweet spots. When the application is built, we will need to test and optimise this. To facilitate this we expose a `ChunkConfig`, defining `split_threshold`, `window_size`, `window_overlap` & `gap_min_size`.
 
 I decided not to implement a tokenizer, for the speed of this task, but also because different embedding model could tokenize in differently, so it would not be accurate at this stage.
-Instead we use the ~4 tokens per char approximation. at a later stage it may be worth implementing an interface to inject a tokenizer into this stage, but it is out of the scope of this task.
+Instead we use the ~4 chars per token approximation. at a later stage it may be worth implementing an interface to inject a tokenizer into this stage, but it is out of the scope of this task.
 
 For symbols that exceed the max token count, I decided to use a traditional token based chunking with overlap %, so a concept that straddles a cut point still shows up whole in at least one piece.
 
@@ -215,7 +213,7 @@ I decided to use `nomic-embed-text` served via Ollama daemon - It seemed like a 
 
 Ollama as a daemon over an in-process model (e.g. sentence-transformers), decouples the model from this process so swapping models later doesn't touch code, at the cost of an extra moving part that has to be running.
 
-Chunks are stored raw and get a header (`file_path :: symbol_kind qualified_name`) added right before embedding.
+Chunks are stored raw and get a header added right before embedding - for a symbol chunk, a `# file_path :: symbol_kind qualified_name` comment line above the content (module-level and plain-file chunks get a simpler fallback header).
 This keeps "how to represent a chunk to the model" a decision local to this layer, swappable per embedding model without touching storage parsing or chunking.
 
 Vector dimension (768) is pinned to this model and baked into the storage at this point.
@@ -244,7 +242,7 @@ I decided that the key tool calls that the agent loop would need to correctly an
 - `read_file` - Read a files content in full
 - `list_files` — list files in the repo
 
-I spun up a quick mcp server using fastMCP to test, connecting the server to claude desktop. I ran a few trail and error tests changing the tool descriptions, until I was happy that the tools were being called in the correct scenarios.
+I spun up a quick mcp server using the `mcp` Python SDK to test, connecting the server to claude desktop. I ran a few trail and error tests changing the tool descriptions, until I was happy that the tools were being called in the correct scenarios.
 
 ## `read_file` needed a new table
 Nothing upstream stores whole-file text — storage only keeps Chunk/Embeddings. I considered two alternatives and rejected both. 
@@ -276,7 +274,7 @@ Each clause answers a specific failure mode:
 - **Be concise** - this feeds a chat UI, not a docs generator.
 
 ## Answer Grounding / Citations
-I knew that for this app it was key that the user could see what actually grounded an answer, not just the answer text. So I designed `ask()` to accumulate every `search_code` and `read_code` result it sees along the way into an `AgentResult.citations` list.
+I knew that for this app it was key that the user could see what actually grounded an answer, not just the answer text. So I designed `ask()` to accumulate every `search_code` and `read_file` result it sees along the way into an `AgentResult.citations` list.
 
 ## Guardrails
 - System prompt treats tool results as untrusted data, not instructions - guard against prompt injection.
@@ -328,8 +326,8 @@ One final feature I wanted to add was improved traceability between the agent’
 - Shared fixtures via `conftest.py` rather than duplicated setup per test file.
 - Frontend logic that might live in components was pulled out into pure functions so that unit-tests dont need a browser to run.
 - Immutable config throughout: `@dataclass(frozen=True)`
-- Interface-based extensibility: `Loader` & `LanguageConfig`
-- Consistent per-layer convention: each layer has a `models.py`, `engine.py`, its own error and a config object
+- Interface-based extensibility: `Loader` & `LanguageConfig`.
+- Consistent per-layer convention: most layers have a `models.py` (typed error + config object) with an `engine.py`.
 - eslint/prettier enforced on the frontend.
 
 ### To add later
@@ -360,12 +358,13 @@ I used Claude Code as a pair programmer throughout, with the following principle
 - Perhaps filter out unit-test files - or have a flag to allow user to specify this. Test files may not always be useful.
 - Add conversation history / multiple message follow up.
 - Remove the local source file ingestion (was useful at design/testing stage but doesn't scale well)
-- Frontend improvement to display full codebase structure (tree) to facilitate easier exploration inside the app
+- Frontend improvement to display full codebase structure (tree) to facilitate easier exploration inside the app.
+- Split this large README up into files in `/docs/`
 
 
 # SCALING TO CLOUD
 This is the payoff of the micro-services design choice set out at the start of the project.
-Layers were deliberately built to have no cross dependancy (aside from some dataclasses which can be generalised later with ease):
+Layers were deliberately built to have no cross dependency (aside from some dataclasses which can be generalised later with ease):
 
 Every layer is already isolated enough to lift out unmodified: put it in its own Lambda / Dockerfile, and it runs as an independent container or function. 
 
