@@ -279,8 +279,15 @@ A more robust option might be a background task with a separate polling endpoint
 
 
 # LAYER 10: FRONTEND
-TBA
+I needed a simple SPA. I decided to go with Vite + React + tailwindcss, with no need for a component library at this stage. This offered a good balance of ease of setup, and future scalability.
 
+I chose TypeScript to mirror the typed style already used on the server side (pydantic) this would allow me to enforce schemas later using a library such as `pydantic-to-typescript`.
+
+for the core functionality required, I settled on a three pane design: chat, source code & ingestion control/status
+
+Code highlighting was a small quality of life feature I decided to introduced as I saw it as important enough for an app all about viewing code.
+
+One final feature I wanted to add to improve improve traceability between the agent’s response and the underlying codebase. Scroll navigation to the source code block, highlighting the relevant lines inside that block that the egent has grounded part of its answer upon.
 
 ---
 
