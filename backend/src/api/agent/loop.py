@@ -47,16 +47,6 @@ def ask(repo_source: str, question: str, config: AgentConfig = _DEFAULT_CONFIG) 
 
 
 def _read_file_citation(path: str, content: str) -> dict:
-    """Turn a read_file result into a citation spanning the whole file.
-
-    The model is told to prefer read_file for context beyond a single
-    search_code chunk, and it cites lines from whatever it read - so a
-    citations list built from search_code alone leaves those references
-    dangling in the frontend (file present in the answer, absent from the
-    source-chunk panel). This gives read_file the same shape as a
-    search_code hit, covering the full line range so any sub-range the
-    model cites resolves via matchCitation's overlap check.
-    """
     line_count = len(content.splitlines()) or 1
     return {
         "file_path": path,
@@ -74,16 +64,6 @@ def _read_file_citation(path: str, content: str) -> dict:
 def _add_citation(
     citations: list[dict], seen: set[tuple[object, object, object]], citation: dict
 ) -> None:
-    """Append a citation unless the same chunk (file_path + line range) is
-    already in the list.
-
-    The same chunk can legitimately come back twice in one turn - two
-    search_code queries overlapping in what they surface, or read_file
-    called on a path search_code already returned a sub-range of - and
-    the frontend renders `citations` as a flat list with no de-dup of its
-    own (PreviewPane.tsx), so a repeat citation showed up as a literal
-    duplicate card in the source-chunks panel. First occurrence wins.
-    """
     key = (citation.get("file_path"), citation.get("start_line"), citation.get("end_line"))
     if key in seen:
         return
