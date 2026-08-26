@@ -5,7 +5,7 @@ Useful for onboarding, PR review, or just exploring a codebase - point it at a G
 
 RAG with AST aware chunking, an agent loop driving Claude through tool calls against the indexed repo, citing the exact code that grounds each answer.
 
-#### Ask, Retrieve, Cite & Jump to Source
+### Ask, Retrieve, Cite & Jump to Source
 ![Repo Copilot answering a question with cited source chunks](examples/Q1-video.gif)
 
 Built on tree-sitter, Ollama (`nomic-embed-text` embeddings), SQLite + `sqlite-vec`, Claude, FastAPI, and React/Tailwind.
@@ -67,14 +67,14 @@ pip install -r requirements-dev.txt
 pytest
 ```
 
-### Frontend:
+#### Frontend:
 ```bash
 cd frontend
 npm install
 npm test
 ```
 
-## Ingest a repo
+### Ingest a repo
 
 You can also manually ingest a repo (run from `backend/`, with `.venv` activated):
 
