@@ -241,8 +241,11 @@ I spun up a quick mcp server using fastMCP to test, connecting the server to cla
 
 ## `read_file` needed a new table
 Nothing upstream stores whole-file text — storage only keeps Chunk/Embeddings. I considered two alternatives and rejected both. 
+
 1. Re-invoking `Loader.load()` per call - this is too costly
-2. Reconstructing text from the chunks - chunks overlap by design, so exact original text isn't reliably recoverable. 
+
+2. Reconstructing text from the chunks - chunks overlap by design, so exact original text isn't reliably recoverable.
+
 The solution I settled on was to add a `files` table to the database containing the full file content, populated at ingestion time. `list_files` then also falls out of that for free.
 
 # LAYER 8: AGENT LOOP
@@ -268,7 +271,7 @@ Each clause answers a specific failure mode, not boilerplate:
 # LAYER 9: HTTP API
 A thin FastAPI wrapper (`backend/src/api/server/main.py`) over the two things a caller does with a repo: ingest it, then ask it questions, plus a third: list what's already been ingested.
 
-As this is a tool built for developers, I thought it was important to also include the retrieval score in the data served to the frontend.
+As this is a tool built for developers, I thought it was important to also include the similarity score in the data served to the frontend.
 
 ## Streaming ingest progress
 I wanted the user to receive some feedback while files were being ingested/indexed, as this can take a long time.
