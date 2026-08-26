@@ -31,7 +31,7 @@ flowchart LR
 ```mermaid
 flowchart LR
     subgraph Clients
-        FE["Frontend\nReact + Tailwind (Vite)"]
+        FE["10. Frontend\nReact + Tailwind (Vite)"]
         MCPClient["MCP client\n(Claude Code / Claude Desktop)"]
     end
 
@@ -64,7 +64,7 @@ flowchart TB
     User(["USER"])
 
     subgraph Clients["Clients"]
-        FE["10 Frontend\nReact + Tailwind (Vite)\nport 5173"]
+        FE["10. Frontend\nReact + Tailwind (Vite)\nport 5173"]
         MCPClient["MCP client\n(Claude Code / Claude Desktop)"]
         CLI["scripts.ingest / scripts.demo\n(CLI, backend/)"]
     end
